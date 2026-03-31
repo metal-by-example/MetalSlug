@@ -6,6 +6,6 @@ This repository contains an implementation of the [Slug](https://sluglibrary.com
 
 ## Sample App Controls
 
-**Scroll**: Zoom in/out
-**Left mouse drag**: pan text
-**Right mouse drag**: rotate text
+**Scroll**: Zoom in/out  
+**Left mouse drag**: pan text  
+**Right mouse drag**: rotate text  
