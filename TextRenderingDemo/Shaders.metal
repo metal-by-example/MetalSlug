@@ -4,6 +4,7 @@ using namespace metal;
 // log_2 of the band texture size. Must match the dimensions of the provided texture.
 // Could be supplied as a function constant instead.
 constexpr constant int kLogBandTextureWidth = 12;
+constexpr constant int kBandTextureWidth = 1 << kLogBandTextureWidth;
 
 struct ViewConstants {
     float4x4 modelViewProjectionMatrix;
@@ -101,7 +102,16 @@ static float2 solve_poly(float2 p1, float2 p2, float2 p3, int axis/* = 0 for x, 
 static int2 lookup_band(int2 glyphLoc, uint offset) {
     int2 loc = int2(glyphLoc.x + int(offset), glyphLoc.y);
     loc.y += loc.x >> kLogBandTextureWidth;
-    loc.x &= (1 << kLogBandTextureWidth) - 1;
+    loc.x &= kBandTextureWidth - 1;
+    return loc;
+}
+
+static int2 advance_band(int2 loc) {
+    loc.x += 1;
+    if (loc.x == kBandTextureWidth) {
+        loc.x = 0;
+        loc.y += 1;
+    }
     return loc;
 }
 
@@ -124,11 +134,13 @@ float4 glyph_fragment(VertexOut in [[stage_in]],
     int2 bandIndex = clamp(int2(emUV * bandScale + bandOffset), int2(0, 0), bandMax);
 
     // Horizontal cast (along +X)
-    uint2 hBand = bandData.read(uint2(glyphLoc.x + bandIndex.y, glyphLoc.y)).xy;
+    uint2 hBand = bandData.read(uint2(lookup_band(glyphLoc, uint(bandIndex.y)))).xy;
     int2 hl = lookup_band(glyphLoc, hBand.y);
     float xCoverage = 0.0f, xWeight = 0.0f;
+    int2 hListLoc = hl;
     for (int ci = 0; ci < int(hBand.x); ci++) {
-        int2 cl = int2(bandData.read(uint2(hl.x + ci, hl.y)).xy);
+        int2 cl = int2(bandData.read(uint2(hListLoc)).xy);
+        hListLoc = advance_band(hListLoc);
 
         // Retrieve Bezier control points and shift origin to current sample point
         float4 p12 = curveData.read(uint2(cl)) - float4(emUV, emUV);
@@ -159,11 +171,13 @@ float4 glyph_fragment(VertexOut in [[stage_in]],
     }
 
     // Vertical cast (along +Y)
-    uint2 vd = bandData.read(uint2(glyphLoc.x + bandMax.y + 1 + bandIndex.x, glyphLoc.y)).xy;
+    uint2 vd = bandData.read(uint2(lookup_band(glyphLoc, uint(bandMax.y + 1 + bandIndex.x)))).xy;
     int2  vl = lookup_band(glyphLoc, vd.y);
     float yCoverage = 0.0f, yWeight = 0.0f;
+    int2 vListLoc = vl;
     for (int ci = 0; ci < int(vd.x); ci++) {
-        int2 cl = int2(bandData.read(uint2(vl.x + ci, vl.y)).xy);
+        int2 cl = int2(bandData.read(uint2(vListLoc)).xy);
+        vListLoc = advance_band(vListLoc);
 
         // Retrieve Bezier control points and shift origin to current sample point
         float4 p12 = curveData.read(uint2(cl)) - float4(emUV, emUV);
